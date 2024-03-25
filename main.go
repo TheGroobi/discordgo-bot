@@ -9,7 +9,6 @@ import (
 )
 
 func main() {
-
 	bot := bot.Start()
 
 	defer bot.Close()

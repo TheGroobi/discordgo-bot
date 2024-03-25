@@ -54,11 +54,15 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	//hello world command
 	if command == "hello" {
-		s.ChannelMessageSend(m.ChannelID, "world")
+		s.ChannelMessageSend(m.ChannelID, "World!")
+	}
+
+	if command == "miki" {
+		s.ChannelMessageSend(m.ChannelID, "Mikołaj giga fiut")
 	}
 
 	if len(args) >= 2 {
-		//PokeAPI fetch command 
+		//PokeAPI fetch command
 		//send embed picture with name of fetched pokemon
 		if command == "poke" {
 			res, err := http.Get("https://pokeapi.co/api/v2/pokemon/" + args[1])
@@ -81,25 +85,28 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			var data map[string]interface{}
 			json.Unmarshal([]byte(b), &data)
 
-			spriteDefault := data["sprites"].(map[string]interface{})["front_default"].(string)
-			spriteShiny := data["sprites"].(map[string]interface{})["front_shiny"].(string)
 			name := strings.ToUpper(data["name"].(string)[:1]) + data["name"].(string)[1:]
 			pokeID := strconv.FormatFloat(data["id"].(float64), 'f', -1, 64)
 
-			defaultEmbed := &discordgo.MessageEmbed{
-				Title:       name,
-				Description: "Pokédex ID: " + pokeID,
-				Color:       5763719,
-				Image: &discordgo.MessageEmbedImage{
-					URL: spriteDefault,
-				},
-			}
-
+			//shiny handling
 			if len(args) == 3 && args[2] == "shiny" {
+				spriteShiny := data["sprites"].(map[string]interface{})["front_shiny"].(string)
+				resSprite, err := http.Get(spriteShiny)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				r := resSprite.Body
+
+				color, err := FindDominantColor(r)
+				if err != nil {
+					log.Fatal(err)
+				}
+
 				shinyEmbed := &discordgo.MessageEmbed{
 					Title:       name + " " + strings.ToUpper(args[2][:1]) + args[2][1:],
 					Description: "Pokédex ID: " + pokeID,
-					Color:       10181046,
+					Color:       int(color),
 					Image: &discordgo.MessageEmbedImage{
 						URL: spriteShiny,
 					},
@@ -110,6 +117,28 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 					log.Fatal(err)
 				}
 			} else {
+				spriteDefault := data["sprites"].(map[string]interface{})["front_default"].(string)
+				resSprite, err := http.Get(spriteDefault)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				r := resSprite.Body
+
+				color, err := FindDominantColor(r)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				defaultEmbed := &discordgo.MessageEmbed{
+					Title:       name,
+					Description: "Pokédex ID: " + pokeID,
+					Color:       int(color),
+					Image: &discordgo.MessageEmbedImage{
+						URL: spriteDefault,
+					},
+				}
+
 				_, err = s.ChannelMessageSendEmbeds(m.ChannelID, []*discordgo.MessageEmbed{defaultEmbed})
 				if err != nil {
 					log.Fatal(err)
