@@ -171,9 +171,9 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 					s.ChannelMessageSend(m.ChannelID, "You must be connected to a voice channel to play a song")
 					return
 				}
-				
+
 				err = speakingHandler(s, m, vs)
-				
+
 				if err != nil {
 					fmt.Println("Error: Speaking handler:", err)
 					return
@@ -224,10 +224,12 @@ func speakingHandler(s *discordgo.Session, m *discordgo.MessageCreate, vs *disco
 
 	vc.Speaking(true)
 	defer vc.Speaking(false)
-	
+
 	vc.Ready = true
 
 	// vc.OpusSend
+	defer vc.Disconnect()
+	defer vc.Close()
 
 	return nil
 }
