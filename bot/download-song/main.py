@@ -2,15 +2,14 @@ import yt_dlp
 import json
 import sys
 
-print("Starting main.py script...")
-
-
 def downloadSong(url:str):
+    print("Starting song download...")
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
+            'preferredcodec': 'opus',
             'preferredquality': '192',
         }],
         'audio_only': True,
@@ -23,8 +22,10 @@ def downloadSong(url:str):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download(url)
-        except ydl.utils.DownloadError:
-            return 'Video not found or inaccessible.'
+            sys.stderr.write("Normal Output")
+        except Exception as e:
+            sys.stderr.write("Exception: {}\n".format(str(e)))
+            sys.exit(1)
     return None
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
 package bot
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,13 +15,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func Start() *discordgo.Session {
+func Start() (bot *discordgo.Session, err error) {
 	godotenv.Load()
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 
-	bot, err := discordgo.New("Bot " + token)
+	bot, err = discordgo.New("Bot " + token)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error creating the discord session:", err)
+		return nil, err
 	}
 
 	bot.AddHandler(messageHandler)
@@ -30,30 +31,31 @@ func Start() *discordgo.Session {
 
 	err = bot.Open()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error opening connection:", err)
+		return nil, err
 	}
 
 	fmt.Println("Bot is running...")
 
-	return bot
+	return bot, nil
 }
 
 func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-
+	//bot is the author of the message
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
 
 	_, fullCommand, found := strings.Cut(m.Content, "$")
 
+	//command doesn't start with prefix
 	if !found {
 		return
 	}
 
-	args := strings.Split(strings.ToLower(fullCommand), " ")
-	command := args[0]
+	args := strings.Split(fullCommand, " ")
+	command := strings.ToLower(args[0])
 
-	//hello world command
 	if command == "hello" {
 		s.ChannelMessageSend(m.ChannelID, "World!")
 	}
@@ -63,6 +65,7 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	if len(args) >= 2 {
+
 		//PokeAPI fetch command
 		//send embed picture with name of fetched pokemon
 		if command == "poke" {
@@ -70,7 +73,8 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 			if err != nil {
 				s.ChannelMessageSend(m.ChannelID, "Something went wrong...")
-				log.Fatal(err)
+				fmt.Println("Error fetching pokemon:", err)
+				return
 			}
 
 			if res.StatusCode == 404 {
@@ -80,7 +84,8 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 			b, err := io.ReadAll(res.Body)
 			if err != nil {
-				log.Fatal(err)
+				fmt.Println("Error reading the response:", err)
+				return
 			}
 
 			var data map[string]interface{}
@@ -90,18 +95,20 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			pokeID := strconv.FormatFloat(data["id"].(float64), 'f', -1, 64)
 
 			//shiny handling
-			if len(args) == 3 && args[2] == "shiny" {
+			if len(args) == 3 && strings.ToLower(args[2]) == "shiny" {
 				spriteShiny := data["sprites"].(map[string]interface{})["front_shiny"].(string)
 				resSprite, err := http.Get(spriteShiny)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("Error reading shiny GET request:", err)
+					return
 				}
 
 				r := resSprite.Body
 
 				color, err := FindDominantColor(r)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("Error finding the dominant color:", err)
+					return
 				}
 
 				shinyEmbed := &discordgo.MessageEmbed{
@@ -115,20 +122,23 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 				_, err = s.ChannelMessageSendEmbeds(m.ChannelID, []*discordgo.MessageEmbed{shinyEmbed})
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("Error sending embed message:", err)
+					return
 				}
 			} else {
 				spriteDefault := data["sprites"].(map[string]interface{})["front_default"].(string)
 				resSprite, err := http.Get(spriteDefault)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("Error reading default GET request", err)
+					return
 				}
 
 				r := resSprite.Body
 
 				color, err := FindDominantColor(r)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("Error finding the dominant color:", err)
+					return
 				}
 
 				defaultEmbed := &discordgo.MessageEmbed{
@@ -142,7 +152,8 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 				_, err = s.ChannelMessageSendEmbeds(m.ChannelID, []*discordgo.MessageEmbed{defaultEmbed})
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("Error: Sending embed message", err)
+					return
 				}
 			}
 
@@ -150,22 +161,73 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		if command == "play" {
-			if len(args) == 1 {
+			if len(args) < 2 {
 				s.ChannelMessageSend(m.ChannelID, "No song provided.")
+
 			} else if len(args) == 2 {
-				downloadSong(args[1])
+				vs, err := s.State.VoiceState(m.GuildID, m.Author.ID)
+
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "You must be connected to a voice channel to play a song")
+					return
+				}
+				
+				err = speakingHandler(s, m, vs)
+				
+				if err != nil {
+					fmt.Println("Error: Speaking handler:", err)
+					return
+				}
+
+				err, message := downloadSong(args[1])
+
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, message)
+					fmt.Println(err)
+					return
+				}
+
+				s.ChannelMessageSend(m.ChannelID, message)
+
+				// if queue empty and nothing playing, after 10 seconds v.Speagkin(false) and v.Disconnect() / v.Close()
 			}
 		}
 	}
 }
 
-func downloadSong(url string) {
+func downloadSong(url string) (err error, message string) {
 
-	println("executing bash")
-	c := exec.Command("./downloadSong.sh", url)
+	c := exec.Command("python", "/Design/discordgo-bot/bot/download-song/main.py", url)
+	fmt.Println("Executing python script...")
+
+	var stdout, stderr bytes.Buffer
+	c.Stdout = &stdout
+	c.Stderr = &stderr
 
 	if err := c.Run(); err != nil {
-		fmt.Println("Error: ", err)
+		fmt.Println("Error:", err)
+		fmt.Println("Python Error:", stderr.String())
+		return err, "Something went wrong..."
+	}
+	fmt.Println("Song downloaded")
+
+	return nil, "Song downloaded successfully!"
+}
+
+func speakingHandler(s *discordgo.Session, m *discordgo.MessageCreate, vs *discordgo.VoiceState) error {
+	vc, err := s.ChannelVoiceJoin(m.GuildID, vs.ChannelID, false, false)
+
+	if err != nil {
+		fmt.Println(err)
+		return err
 	}
 
+	vc.Speaking(true)
+	defer vc.Speaking(false)
+	
+	vc.Ready = true
+
+	// vc.OpusSend
+
+	return nil
 }

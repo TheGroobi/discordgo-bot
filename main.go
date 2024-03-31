@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,7 +10,12 @@ import (
 )
 
 func main() {
-	bot := bot.Start()
+	bot, err := bot.Start()
+
+	if err != nil {
+		fmt.Println("Error starting the bot:", err)
+		return
+	}
 
 	defer bot.Close()
 
