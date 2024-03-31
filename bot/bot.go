@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -147,6 +148,24 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 			fmt.Printf("client: status code: %d\n", res.StatusCode)
 		}
+
+		if command == "play" {
+			if len(args) == 1 {
+				s.ChannelMessageSend(m.ChannelID, "No song provided.")
+			} else if len(args) == 2 {
+				downloadSong(args[1])
+			}
+		}
+	}
+}
+
+func downloadSong(url string) {
+
+	println("executing bash")
+	c := exec.Command("./downloadSong.sh", url)
+
+	if err := c.Run(); err != nil {
+		fmt.Println("Error: ", err)
 	}
 
 }
