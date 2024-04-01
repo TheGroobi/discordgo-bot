@@ -35,7 +35,7 @@ func Start() (bot *discordgo.Session, err error) {
 		return nil, err
 	}
 
-	fmt.Println("Bot is running...")
+	fmt.Println("Starting bot...")
 
 	return bot, nil
 }
@@ -172,13 +172,6 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 					return
 				}
 
-				err = speakingHandler(s, m, vs)
-
-				if err != nil {
-					fmt.Println("Error: Speaking handler:", err)
-					return
-				}
-
 				err, message := downloadSong(args[1])
 
 				if err != nil {
@@ -186,8 +179,9 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 					fmt.Println(err)
 					return
 				}
-
 				s.ChannelMessageSend(m.ChannelID, message)
+
+				speakingHandler(s, m, vs)
 
 				// if queue empty and nothing playing, after 10 seconds v.Speagkin(false) and v.Disconnect() / v.Close()
 			}
@@ -214,22 +208,47 @@ func downloadSong(url string) (err error, message string) {
 	return nil, "Song downloaded successfully!"
 }
 
-func speakingHandler(s *discordgo.Session, m *discordgo.MessageCreate, vs *discordgo.VoiceState) error {
+func speakingHandler(s *discordgo.Session, m *discordgo.MessageCreate, vs *discordgo.VoiceState) {
 	vc, err := s.ChannelVoiceJoin(m.GuildID, vs.ChannelID, false, false)
 
 	if err != nil {
-		fmt.Println(err)
-		return err
+		fmt.Println("Error: Joining the voice channel:", err)
+		return
 	}
+	defer vc.Disconnect()
+	defer vc.Close()
+
+	vs.Mute = false
 
 	vc.Speaking(true)
 	defer vc.Speaking(false)
 
 	vc.Ready = true
 
-	// vc.OpusSend
-	defer vc.Disconnect()
-	defer vc.Close()
+	file, err := os.Open("./songs/currentSong.opus")
+	if err != nil {
+		fmt.Println("Error: Opening .opus file", err)
+		return
+	}
 
-	return nil
+	fmt.Println("file opened")
+	defer file.Close()
+
+	buffer := make([]byte, 2048)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil {
+			fmt.Println("Error reading the file:", err)
+			break
+		}
+
+		if n == 0 {
+			break
+		}
+
+		vc.OpusSend <- buffer[:n]
+		fmt.Println("chunk sent", n)
+	}
+
+	fmt.Println("Audio Sent")
 }
