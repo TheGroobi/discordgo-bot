@@ -1,18 +1,18 @@
 package bot
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
+	"github.com/thegroobi/discordgo-bot/bot/commands"
+	"github.com/thegroobi/discordgo-bot/bot/helper"
 )
 
 func Start() (bot *discordgo.Session, err error) {
@@ -36,7 +36,6 @@ func Start() (bot *discordgo.Session, err error) {
 	}
 
 	fmt.Println("Starting bot...")
-
 	return bot, nil
 }
 
@@ -105,7 +104,7 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 				r := resSprite.Body
 
-				color, err := FindDominantColor(r)
+				color, err := helper.FindDominantColor(r)
 				if err != nil {
 					fmt.Println("Error finding the dominant color:", err)
 					return
@@ -135,7 +134,7 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 				r := resSprite.Body
 
-				color, err := FindDominantColor(r)
+				color, err := helper.FindDominantColor(r)
 				if err != nil {
 					fmt.Println("Error finding the dominant color:", err)
 					return
@@ -165,14 +164,8 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 				s.ChannelMessageSend(m.ChannelID, "No song provided.")
 
 			} else if len(args) == 2 {
-				vs, err := s.State.VoiceState(m.GuildID, m.Author.ID)
 
-				if err != nil {
-					s.ChannelMessageSend(m.ChannelID, "You must be connected to a voice channel to play a song")
-					return
-				}
-
-				err, message := downloadSong(args[1])
+				message, err := helper.DownloadSong(args[1])
 
 				if err != nil {
 					s.ChannelMessageSend(m.ChannelID, message)
@@ -181,74 +174,9 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 				}
 				s.ChannelMessageSend(m.ChannelID, message)
 
-				speakingHandler(s, m, vs)
+				commands.PlayHandler(s, m)
 
-				// if queue empty and nothing playing, after 10 seconds v.Speagkin(false) and v.Disconnect() / v.Close()
 			}
 		}
 	}
-}
-
-func downloadSong(url string) (err error, message string) {
-
-	c := exec.Command("python", "/Design/discordgo-bot/bot/download-song/main.py", url)
-	fmt.Println("Executing python script...")
-
-	var stdout, stderr bytes.Buffer
-	c.Stdout = &stdout
-	c.Stderr = &stderr
-
-	if err := c.Run(); err != nil {
-		fmt.Println("Error:", err)
-		fmt.Println("Python Error:", stderr.String())
-		return err, "Something went wrong..."
-	}
-	fmt.Println("Song downloaded")
-
-	return nil, "Song downloaded successfully!"
-}
-
-func speakingHandler(s *discordgo.Session, m *discordgo.MessageCreate, vs *discordgo.VoiceState) {
-	vc, err := s.ChannelVoiceJoin(m.GuildID, vs.ChannelID, false, false)
-
-	if err != nil {
-		fmt.Println("Error: Joining the voice channel:", err)
-		return
-	}
-	defer vc.Disconnect()
-	defer vc.Close()
-
-	vs.Mute = false
-
-	vc.Speaking(true)
-	defer vc.Speaking(false)
-
-	vc.Ready = true
-
-	file, err := os.Open("./songs/currentSong.opus")
-	if err != nil {
-		fmt.Println("Error: Opening .opus file", err)
-		return
-	}
-
-	fmt.Println("file opened")
-	defer file.Close()
-
-	buffer := make([]byte, 2048)
-	for {
-		n, err := file.Read(buffer)
-		if err != nil {
-			fmt.Println("Error reading the file:", err)
-			break
-		}
-
-		if n == 0 {
-			break
-		}
-
-		vc.OpusSend <- buffer[:n]
-		fmt.Println("chunk sent", n)
-	}
-
-	fmt.Println("Audio Sent")
 }
