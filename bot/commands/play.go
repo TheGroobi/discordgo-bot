@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -11,20 +10,12 @@ import (
 	"github.com/thegroobi/discordgo-bot/bot/helper"
 )
 
-var buffer = make([][]byte, 0)
-
 func PlayHandler(s *discordgo.Session, m *discordgo.MessageCreate) (err error) {
 
 	vs, err := s.State.VoiceState(m.GuildID, m.Author.ID)
 	if err != nil {
 		helper.OnError("Establishing voice state", err)
 		s.ChannelMessageSend(m.ChannelID, "You must be connected to a voice channel to play a song")
-		return err
-	}
-
-	loadSong()
-	if err != nil {
-		helper.OnError("Loading song", err)
 		return err
 	}
 
@@ -36,51 +27,54 @@ func PlayHandler(s *discordgo.Session, m *discordgo.MessageCreate) (err error) {
 	return nil
 }
 
-func loadSong() error {
-	file, err := os.Open("songs/currentSong.opus")
-	if err != nil {
-		helper.OnError("Opening dca file", err)
-		return err
-	}
+// func loadSong(vc *discordgo.VoiceConnection) error {
+// 	file, err := os.Open("/test.dca")
+// 	if err != nil {
+// 		helper.OnError("Opening dca file", err)
+// 		return err
+// 	}
 
-	defer func() {
-		err := file.Close()
-		if err != nil {
-			helper.OnError("Closing the file", err)
-		}
-	}()
+// 	defer func() {
+// 		err := file.Close()
+// 		if err != nil {
+// 			helper.OnError("Closing the file", err)
+// 		}
+// 	}()
 
-	// var opuslen int8
-	counter := 0
-	for {
+// 	// var opuslen int16
+// 	counter := 0
 
-		counter++
-		fmt.Printf("file read 1, times:%d\n", counter)
-		// err = binary.Read(file, binary.LittleEndian, &opuslen)
-		// if err != nil {
-		// 	if err == io.EOF {
-		// 		break
-		// 	}
-		// 	helper.OnError("Reading from dca file", err)
-		// 	return err
-		// }
+// 	for {
 
-		InBuf := make([]byte, 960)
-		err := binary.Read(file, binary.LittleEndian, &InBuf)
+// 		counter++
+// 		fmt.Printf("file read 1, times:%d\n", counter)
 
-		fmt.Printf("file read 2, times:%d\n", counter)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			helper.OnError("Reading from dca file", err)
-			return err
-		}
+// 		// err = binary.Read(file, binary.LittleEndian, &opuslen)
+// 		chunk, err := file.Read(buffer)
+// 		if err != nil {
+// 			if err == io.EOF {
+// 				break
+// 			}
+// 			helper.OnError("Reading from dca file", err)
+// 			return err
+// 		}
 
-		buffer = append(buffer, InBuf)
-	}
-	return nil
-}
+// 		vc.OpusSend <- buffer[:chunk]
+// 		// 	err := binary.Read(file, binary.LittleEndian, &InBuf)
+
+// 		// 	if err != nil {
+// 		// 		if err == io.EOF {
+// 		// 			break
+// 		// 		}
+// 		// 		helper.OnError("Reading from dca file", err)
+// 		// 		return err
+// 		// 	}
+
+// 		// 	buffer = append(buffer, InBuf)
+// 		// }
+// 	}
+// 	return nil
+// }
 
 func playSong(s *discordgo.Session, gID, cID string) error {
 
@@ -100,17 +94,62 @@ func playSong(s *discordgo.Session, gID, cID string) error {
 
 	time.Sleep(250 * time.Millisecond)
 
-	defer func() {
-		err = vc.Speaking(false)
-		if err != nil {
-			helper.OnError("Couldn't set speaking", err)
-			return
-		}
-		vc.Disconnect()
-	}()
+	// defer func() {
+	// 	err = vc.Speaking(false)
+	// 	if err != nil {
+	// 		helper.OnError("Couldn't set speaking", err)
+	// 		return
+	// 	}
+	// 	vc.Disconnect()
+	// }()
 
-	for _, b := range buffer {
-		vc.OpusSend <- b
+	file, err := os.Open("bot/helper/download-song/songs/output.opus")
+	if err != nil {
+		helper.OnError("Opening opus file", err)
+		return err
+	}
+
+	// defer func() {
+	// 	err := file.Close()
+	// 	if err != nil {
+	// 		helper.OnError("Closing the file", err)
+	// 	}
+	// }()
+
+	counter := 0
+	var buffer = make([]byte, 960*2*2)
+
+	for {
+
+		counter++
+		fmt.Printf("read: %d times\n", counter)
+
+		// err = binary.Read(file, binary.LittleEndian, &opuslen)
+		chunk, err := file.Read(buffer)
+
+		// fmt.Printf("\nchunk %d: %s", chunk, buffer[:chunk])
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			helper.OnError("Reading from dca file", err)
+			return err
+		}
+
+		if chunk == len(buffer) {
+			vc.OpusSend <- buffer[:chunk]
+		}
 	}
 	return nil
 }
+
+// for _, buf := range buffer {
+// 	vc.OpusSend <- buf
+// 	if err != nil {
+// 		if err == io.EOF {
+// 			break
+// 		}
+// 		helper.OnError("Reading from dca file", err)
+// 		return err
+// 	}
+// }

@@ -1,4 +1,5 @@
 .env
 songs
 *.opus
+*.pcm
 *.mp3
