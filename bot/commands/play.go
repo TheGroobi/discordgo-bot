@@ -1,66 +1,116 @@
 package commands
 
 import (
-	"flag"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/thegroobi/discordgo-bot/bot/helper"
 )
 
-func PlayHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	var (
-		ChanID  = m.ChannelID
-		GuildID = m.GuildID
-	)
+var buffer = make([][]byte, 0)
 
-	flag.Parse()
+func PlayHandler(s *discordgo.Session, m *discordgo.MessageCreate) (err error) {
 
-	vs, err := s.State.VoiceState(GuildID, m.Author.ID)
-
+	vs, err := s.State.VoiceState(m.GuildID, m.Author.ID)
 	if err != nil {
+		helper.OnError("Establishing voice state", err)
 		s.ChannelMessageSend(m.ChannelID, "You must be connected to a voice channel to play a song")
-		return
+		return err
 	}
 
-	vc, err := s.ChannelVoiceJoin(GuildID, ChanID, false, true)
-
+	loadSong()
 	if err != nil {
-		fmt.Println("Error: Joining the voice channel:", err)
-		return
+		helper.OnError("Loading song", err)
+		return err
 	}
 
-	vs.Mute = false
-
-	vc.Speaking(true)
-	defer vc.Speaking(false)
-
-	vc.Ready = true
-
-	file, err := os.Open("./songs/currentSong.opus")
+	err = playSong(s, m.GuildID, vs.ChannelID)
 	if err != nil {
-		fmt.Println("Error: Opening .opus file", err)
-		return
+		helper.OnError("Playing song", err)
 	}
 
-	fmt.Println("file opened")
-	defer file.Close()
+	return nil
+}
 
-	buffer := make([]byte, 2048)
-	for {
-		n, err := file.Read(buffer)
+func loadSong() error {
+	file, err := os.Open("songs/currentSong.opus")
+	if err != nil {
+		helper.OnError("Opening dca file", err)
+		return err
+	}
+
+	defer func() {
+		err := file.Close()
 		if err != nil {
-			fmt.Println("Error reading the file:", err)
-			break
+			helper.OnError("Closing the file", err)
+		}
+	}()
+
+	// var opuslen int8
+	counter := 0
+	for {
+
+		counter++
+		fmt.Printf("file read 1, times:%d\n", counter)
+		// err = binary.Read(file, binary.LittleEndian, &opuslen)
+		// if err != nil {
+		// 	if err == io.EOF {
+		// 		break
+		// 	}
+		// 	helper.OnError("Reading from dca file", err)
+		// 	return err
+		// }
+
+		InBuf := make([]byte, 960)
+		err := binary.Read(file, binary.LittleEndian, &InBuf)
+
+		fmt.Printf("file read 2, times:%d\n", counter)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			helper.OnError("Reading from dca file", err)
+			return err
 		}
 
-		if n == 0 {
-			break
-		}
+		buffer = append(buffer, InBuf)
+	}
+	return nil
+}
 
-		vc.OpusSend <- buffer[:n]
-		fmt.Println("chunk sent", n)
+func playSong(s *discordgo.Session, gID, cID string) error {
+
+	vc, err := s.ChannelVoiceJoin(gID, cID, false, true)
+	if err != nil {
+		helper.OnError("Connecting to voice", err)
+		return err
 	}
 
-	vc.Close()
+	time.Sleep(250 * time.Millisecond)
+
+	err = vc.Speaking(true)
+	if err != nil {
+		helper.OnError("Set speaking", err)
+		return err
+	}
+
+	time.Sleep(250 * time.Millisecond)
+
+	defer func() {
+		err = vc.Speaking(false)
+		if err != nil {
+			helper.OnError("Couldn't set speaking", err)
+			return
+		}
+		vc.Disconnect()
+	}()
+
+	for _, b := range buffer {
+		vc.OpusSend <- b
+	}
+	return nil
 }

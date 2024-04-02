@@ -16,7 +16,7 @@ def downloadSong(url:str):
         'ffmpeg_location': 'C:/ffmpeg/bin',
         'noplaylist': True,
         'max_filesize': 10000000,
-        'outtmpl': './songs/currentSong',
+        'outtmpl': './songs/currentSong.dca',
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

@@ -4,7 +4,6 @@ import (
 	"image"
 	_ "image/png"
 	"io"
-	"log"
 	"strconv"
 
 	"github.com/cenkalti/dominantcolor"
@@ -21,8 +20,9 @@ func FindDominantColor(file io.Reader) (int, error) {
 	hex = hex[1:]
 
 	color, err := strconv.ParseInt(hex, 16, 32)
+	
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 
 	return int(color), nil

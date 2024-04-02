@@ -16,8 +16,6 @@ func DownloadSong(url string) (message string, err error) {
 	c.Stderr = &stderr
 
 	if err := c.Run(); err != nil {
-		fmt.Println("Error:", err)
-		fmt.Println("Python Error:", stderr.String())
 		return "Something went wrong...", err
 	}
 	fmt.Println("Song downloaded")

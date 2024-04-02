@@ -165,14 +165,14 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 			} else if len(args) == 2 {
 
-				message, err := helper.DownloadSong(args[1])
+				// message, err := helper.DownloadSong(args[1])
 
-				if err != nil {
-					s.ChannelMessageSend(m.ChannelID, message)
-					fmt.Println(err)
-					return
-				}
-				s.ChannelMessageSend(m.ChannelID, message)
+				// if err != nil {
+				// 	s.ChannelMessageSend(m.ChannelID, message)
+				// 	fmt.Println(err)
+				// 	return
+				// }
+				// s.ChannelMessageSend(m.ChannelID, message)
 
 				commands.PlayHandler(s, m)
 
